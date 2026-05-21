@@ -1,19 +1,26 @@
+const dotenv = require("dotenv");
+dotenv.config();
+
 const express = require("express");
 const { ObjectId } = require("mongodb");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 const app = express();
-const dotenv = require("dotenv");
-dotenv.config();
+
+app.use(express.json());
+const cors = require("cors");
+const port = process.env.PORT || 8080;
+
+app.use(
+  cors({
+    origin: ["http://localhost:3000"],
+    optionsSuccessStatus: 200,
+  }),
+);
 
 const JWKS = createRemoteJWKSet(
   new URL(`${process.env.CLIENT_URL}/api/auth/jwks`),
 );
-
-const cors = require("cors");
-const port = process.env.PORT || 8080;
-
-app.use(cors());
 
 const uri = process.env.MONGOBD_URI;
 
@@ -32,7 +39,8 @@ const logger = (req, res, next) => {
 };
 
 const varifyToken = async (req, res, next) => {
-  const authorization = req.headers;
+  const { authorization } = req.headers;
+
   const token = authorization?.split(" ")[1];
 
   if (!token) {
@@ -68,8 +76,9 @@ async function run() {
 
       let cursor;
       if (search) {
-        curson = roomCollection.find({ room_name: { $eq: "" } }).toArray();
-        res.send({});
+        cursor = await roomCollection.find({
+          $or: [{ room_name: { $regex: search, $options: "i" } }],
+        });
       } else {
         cursor = roomCollection.find();
       }
@@ -117,6 +126,40 @@ async function run() {
       const query = { _id: new ObjectId(roomId) };
 
       const result = await roomCollection.findOne(query);
+      console.log(result);
+      res.send(result);
+    });
+
+    app.patch("/rooms/:roomId", varifyToken, async (req, res) => {
+      const { roomId } = req.params;
+      const bookingData = req.body;
+
+      const room = await roomCollection.findOne({ _id: new ObjectId(roomId) });
+
+      if (!room) {
+        res.status(404).json({ message: "Room not found " });
+      }
+      await roomCollection.updateOne(
+        { _id: new ObjectId(roomId) },
+        {
+          $inc: { bookCount: 1 },
+          $set: {
+            lastBookedAt: new Date(),
+          },
+        },
+      );
+
+      const result = await bookingCollection.insertOne({
+        ...bookingData,
+        bookAt: new Date(),
+      });
+
+      res.send(result);
+    });
+
+    app.get("/mybookings/:userId", varifyToken, async (req, res) => {
+      const { userId } = req.params;
+      const result = await bookingCollection.find({ userId: userId }).toArray();
       res.send(result);
     });
 
@@ -128,6 +171,7 @@ async function run() {
     //await client.close();
   }
 }
+
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
