@@ -27,6 +27,7 @@ const client = new MongoClient(uri, {
 });
 
 const logger = (req, res, next) => {
+  console.log(`${req.method} | ${req.url}`);
   next();
 };
 
@@ -66,7 +67,8 @@ async function run() {
 
       let cursor;
       if (search) {
-        curson = roomCollection.find({ room_name: search });
+        curson = roomCollection.find({ room_name: { $eq: "" } }).toArray();
+        res.send({});
       } else {
         cursor = roomCollection.find();
       }
