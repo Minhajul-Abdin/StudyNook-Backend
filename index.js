@@ -61,6 +61,7 @@ async function run() {
 
     const db = client.db("studynookdb");
     const roomCollection = db.collection("rooms");
+    const bookingCollection = db.collection("bookings");
 
     app.get("/rooms", async (req, res) => {
       const { search } = req.query;
@@ -80,6 +81,33 @@ async function run() {
     app.get("/latest", async (req, res) => {
       const cursor = roomCollection.find().limit(6);
       const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.patch("/mybookings/:roomId", varifyToken, async (req, res) => {
+      const { roomId } = req.params;
+      const bookingData = req.body;
+
+      const room = await roomCollection.findOne({ _id: new ObjectId(roomId) });
+
+      if (!room) {
+        res.status(404).json({ message: "Room not found " });
+      }
+      await roomCollection.updateOne(
+        { _id: new ObjectId(roomId) },
+        {
+          $inc: { bookCount: 1 },
+          $set: {
+            lastBookedAt: new Date(),
+          },
+        },
+      );
+
+      const result = await bookingCollection.insertOne({
+        ...bookingData,
+        bookAt: new Date(),
+      });
+
       res.send(result);
     });
 
